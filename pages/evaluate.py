@@ -64,6 +64,14 @@ if speakers:
 
 st.write("Thank you for attending. Please take a moment to complete this post-evaluation.")
 
+st.caption(
+    "🔒 **Data Privacy Notice.** In compliance with the Data Privacy Act of 2012 (Republic Act No. 10173), "
+    "the information you provide in this evaluation form will be collected and processed solely for the "
+    "purpose of assessing and improving DBES programs, activities, seminars, and trainings. Your responses "
+    "will be kept confidential and will not be shared with third parties, except as required by law or with "
+    "your consent."
+)
+
 if st.session_state.get(f"submitted_{activity['id']}"):
     st.success("Your response has been recorded. Thank you!")
     st.stop()
