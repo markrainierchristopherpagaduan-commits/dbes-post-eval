@@ -179,6 +179,14 @@ DEFAULT_BASE_QUESTIONS = [
     ("Any other suggestions or comments?", "open_ended", "Suggestions", None, 10),
 ]
 
+# Base categories that should appear BEFORE the per-speaker Session N areas
+# when a new activity's question list is first built. Everything else
+# (Overall, Strengths, Areas to Improve, Suggestions, and any custom base
+# category added later) falls after the sessions. This gives the standard
+# area order: Content & Objectives, Facilitator, Logistics & Venue,
+# Session 1, Session 2, ..., Overall, Strengths, Areas to Improve, Suggestions.
+PRE_SESSION_CATEGORIES = {"Content & Objectives", "Facilitator", "Logistics & Venue"}
+
 
 DEFAULT_SPEAKER_QUESTIONS = [
     # (text_template, qtype, order_offset) — {speaker} is replaced with the speaker's name

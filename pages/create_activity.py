@@ -98,7 +98,10 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
     if st.button("Continue to evaluation questions →", type="primary",
                  disabled=len(st.session_state["draft_speakers"]) == 0):
         base_questions = db.list_base_questions()
-        draft = [{**bq, "source": "base", "include": True, "speaker_index": None, "uid": db.new_id()} for bq in base_questions]
+        pre_session = [bq for bq in base_questions if bq["category"] in db.PRE_SESSION_CATEGORIES]
+        post_session = [bq for bq in base_questions if bq["category"] not in db.PRE_SESSION_CATEGORIES]
+
+        draft = [{**bq, "source": "base", "include": True, "speaker_index": None, "uid": db.new_id()} for bq in pre_session]
 
         order = len(draft) + 1
         for s_idx, sp in enumerate(st.session_state["draft_speakers"]):
@@ -117,6 +120,8 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
                 })
                 order += 1
 
+        draft += [{**bq, "source": "base", "include": True, "speaker_index": None, "uid": db.new_id()} for bq in post_session]
+
         st.session_state["draft_questions"] = draft
         st.session_state["questions_ready"] = True
         st.rerun()
@@ -132,8 +137,8 @@ if st.session_state.get("questions_ready"):
     st.divider()
     st.subheader("3. Evaluation questions")
     st.caption(
-        "Base questions (Content & Objectives, Facilitator, Logistics & Venue, Strengths, Areas to Improve, "
-        "Suggestions, Overall) and each speaker's session questions are pre-filled below, grouped by area. "
+        "Areas appear in this order: Content & Objectives, Facilitator, Logistics & Venue, each speaker's "
+        "Session, then Overall, Strengths, Areas to Improve, and Suggestions. "
         "Uncheck to exclude a question, edit its text/category/type inline, and use the **+ Add** box under "
         "each area to insert a new question directly there. Need an area that isn't listed? Use "
         "'Add a question under a brand-new area' at the bottom."
