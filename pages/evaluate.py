@@ -1,7 +1,39 @@
+import re
+
 import streamlit as st
 
 import db
 import utils
+
+# ---------------------------------------------------------------------------
+# Open-ended answer validation
+# ---------------------------------------------------------------------------
+MIN_WORDS = 3
+MIN_CHARS = 10
+
+
+def _is_low_effort_answer(text: str) -> bool:
+    """True if the answer doesn't look like a real, complete response:
+    blank/whitespace-only, too short, fewer than a few words, no letters
+    at all, or mostly one repeated character (e.g. 'aaaaaaaa', '.......',
+    a string of spaces)."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return True
+    if len(cleaned) < MIN_CHARS:
+        return True
+    words = [w for w in re.split(r"\s+", cleaned) if w]
+    if len(words) < MIN_WORDS:
+        return True
+    if not re.search(r"[A-Za-z]", cleaned):
+        return True
+    letters_only = re.sub(r"[^A-Za-z]", "", cleaned).lower()
+    if letters_only:
+        most_common_count = max(letters_only.count(c) for c in set(letters_only))
+        if most_common_count / len(letters_only) > 0.6:
+            return True
+    return False
+
 
 db.init_db()
 
@@ -45,7 +77,7 @@ with st.form("eval_form"):
 
     st.divider()
     st.subheader("Evaluation")
-    st.caption("Fields marked * are required.")
+    st.caption("Fields marked * are required. Please answer in a complete sentence — a single word, symbols, or blank spaces will not be accepted.")
 
     answers = {}
     current_category = None
@@ -60,18 +92,22 @@ with st.form("eval_form"):
             options = (qn["options"] or "").split("|") if qn["options"] else ["Yes", "No"]
             answers[qn["id"]] = st.radio(qn["question_text"], options, key=f"q_{qn['id']}")
         else:
-            answers[qn["id"]] = st.text_area(f'{qn["question_text"]} *', key=f"q_{qn['id']}")
+            answers[qn["id"]] = st.text_area(
+                f'{qn["question_text"]} *', key=f"q_{qn['id']}",
+                help="Please write a complete sentence (at least a few words).",
+            )
 
     submitted = st.form_submit_button("Submit evaluation", type="primary")
 
 if submitted:
     missing = [
         qn["question_text"] for qn in questions
-        if qn["qtype"] == "open_ended" and not (answers.get(qn["id"]) or "").strip()
+        if qn["qtype"] == "open_ended" and _is_low_effort_answer(answers.get(qn["id"]))
     ]
     if missing:
         st.error(
-            "Please answer all required open-ended questions before submitting:\n\n"
+            "Please provide a complete, meaningful answer (not just a word, symbols, or spaces) "
+            "for the following required question(s):\n\n"
             + "\n".join(f"- {m}" for m in missing)
         )
     else:
