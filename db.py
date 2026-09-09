@@ -225,6 +225,52 @@ def init_db():
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 [new_id(), text, qtype, category, options, order],
             )
+    else:
+        # The block above only ever runs once (when the table is first
+        # created), so editing DEFAULT_BASE_QUESTIONS never touched a
+        # database that had already been seeded — which is why the
+        # open-ended questions kept showing up interleaved with the
+        # ratings even after the ordering in this file was corrected.
+        # This realigns the already-seeded rows every run; it's a no-op
+        # once they match.
+        _fix_base_question_order()
+
+
+def _fix_base_question_order():
+    """Force base_questions into the canonical CATEGORY order — Content &
+    Objectives, Facilitator, Logistics & Venue, Overall, Strengths, Areas
+    to Improve, Suggestions — regardless of the exact question wording.
+
+    The previous version of this fix matched rows to DEFAULT_BASE_QUESTIONS
+    by exact question_text, which silently did nothing on any database
+    whose seeded wording had drifted even slightly (a trailing space, a
+    reworded question, an extra/removed base question) — which is why the
+    open-ended questions kept showing up sandwiched between the ratings
+    even after that fix was deployed. Matching by category name instead is
+    resilient to all of that: as long as a row's `category` column is one
+    of the seven known category names, it gets sorted into the right
+    bucket; anything in an unrecognized/custom category is pushed to the
+    end, keeping its current relative order. Safe to call every run — a
+    no-op once everything is already in order."""
+    category_rank: dict[str, int] = {}
+    for _text, _qtype, category, _options, _order in DEFAULT_BASE_QUESTIONS:
+        category_rank.setdefault(category, len(category_rank))
+
+    rs = q("SELECT id, category, order_index FROM base_questions ORDER BY order_index")
+    rows = [(r[0], r[1], r[2]) for r in rs.rows]
+
+    def _rank(row):
+        _row_id, category, order_index = row
+        return (category_rank.get(category, len(category_rank)), order_index)
+
+    ordered = sorted(rows, key=_rank)
+    stmts = [
+        ("UPDATE base_questions SET order_index = ? WHERE id = ?", [idx + 1, row_id])
+        for idx, (row_id, _category, _order_index) in enumerate(ordered)
+        if idx + 1 != _order_index
+    ]
+    if stmts:
+        qmany(stmts)
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +379,48 @@ def add_activity_questions(activity_id: str, questions: list[dict]):
             [new_id(), activity_id, qd["question_text"], qd["qtype"], qd["category"], qd.get("options"),
              qd["order_index"], qd.get("source", "base"), qd.get("speaker_id")],
         ))
+    if stmts:
+        qmany(stmts)
+
+
+def fix_activity_question_order(activity_id: str):
+    """Re-sort an ALREADY-CREATED activity's stored questions into the
+    canonical area order — pre-session categories, then each speaker's
+    Session N (by session number), then Overall/Strengths/Areas to
+    Improve/Suggestions, then any custom areas keeping their existing
+    relative order — without adding, removing, or changing the wording of
+    any question. Use this to repair activities created before the
+    base-question ordering was corrected; new activities no longer need it."""
+    questions = get_activity_questions(activity_id)
+    speakers = get_activity_speakers(activity_id)
+    session_rank = {f'Session {sp["session"]}': sp["order_index"] for sp in speakers if sp["session"] is not None}
+
+    def _unique_in_order(cats):
+        seen = set()
+        out = []
+        for c in cats:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
+    pre_categories = _unique_in_order(c for _, _, c, _, _ in DEFAULT_BASE_QUESTIONS if c in PRE_SESSION_CATEGORIES)
+    post_categories = _unique_in_order(c for _, _, c, _, _ in DEFAULT_BASE_QUESTIONS if c not in PRE_SESSION_CATEGORIES)
+
+    def category_rank(cat: str):
+        if cat in pre_categories:
+            return (0, pre_categories.index(cat))
+        if cat in session_rank:
+            return (1, session_rank[cat])
+        if cat in post_categories:
+            return (2, post_categories.index(cat))
+        return (3, 0)  # unrecognized/custom area: keep relative spot, at the end
+
+    ordered = sorted(questions, key=lambda qn: (category_rank(qn["category"]), qn["order_index"]))
+    stmts = [
+        ("UPDATE activity_questions SET order_index = ? WHERE id = ?", [idx + 1, qn["id"]])
+        for idx, qn in enumerate(ordered)
+    ]
     if stmts:
         qmany(stmts)
 
