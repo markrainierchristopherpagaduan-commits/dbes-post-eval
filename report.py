@@ -83,7 +83,7 @@ def build_report(activity_id: str) -> bytes:
         sp_line = doc.add_paragraph()
         sp_line.add_run("Speaker(s): ").bold = True
         sp_line.add_run(", ".join(
-            sp["name"] + (f' ({sp["topic"]})' if sp["topic"] else "") for sp in speakers
+            f'Session {sp["session"]}: {sp["name"]}' + (f' ({sp["topic"]})' if sp["topic"] else "") for sp in speakers
         ))
 
     # --- Quantitative summary -------------------------------------------
@@ -101,10 +101,11 @@ def build_report(activity_id: str) -> bytes:
     if speakers:
         _add_heading(doc, "Per-Speaker Ratings", level=1)
         rows = [
-            (sa["name"], sa["topic"] or "—", f'{sa["avg_rating"]:.2f}' if sa["avg_rating"] is not None else "—", sa["n"])
+            (f'Session {sa["session"]}', sa["name"], sa["topic"] or "—",
+             f'{sa["avg_rating"]:.2f}' if sa["avg_rating"] is not None else "—", sa["n"])
             for sa in speaker_averages
         ]
-        _rating_table(doc, rows, ["Speaker", "Topic", "Overall Avg. Rating (1–5)", "# Ratings"])
+        _rating_table(doc, rows, ["Session", "Speaker", "Topic", "Overall Avg. Rating (1–5)", "# Ratings"])
 
     # --- Qualitative summary ---------------------------------------------
     _add_heading(doc, "Qualitative Summary", level=1)

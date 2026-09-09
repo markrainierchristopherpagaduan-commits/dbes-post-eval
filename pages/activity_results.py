@@ -40,8 +40,9 @@ speakers = db.get_activity_speakers(activity["id"])
 if speakers:
     st.subheader("Per-speaker ratings")
     speaker_avgs = db.get_speaker_rating_averages(activity["id"])
-    sdf = pd.DataFrame(speaker_avgs)[["name", "topic", "avg_rating", "n"]]
-    sdf.columns = ["Speaker", "Topic", "Overall average rating (1–5)", "# Ratings"]
+    sdf = pd.DataFrame(speaker_avgs)[["session", "name", "topic", "avg_rating", "n"]]
+    sdf["session"] = sdf["session"].apply(lambda s: f"Session {s}" if s is not None else "—")
+    sdf.columns = ["Session", "Speaker", "Topic", "Overall average rating (1–5)", "# Ratings"]
     st.dataframe(sdf, use_container_width=True, hide_index=True)
 
 st.subheader("Open-ended responses")

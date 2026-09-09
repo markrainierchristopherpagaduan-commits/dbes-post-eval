@@ -27,7 +27,7 @@ st.caption(" · ".join(meta_bits))
 
 speakers = db.get_activity_speakers(activity["id"])
 if speakers:
-    speaker_bits = [f'{sp["name"]}' + (f' ({sp["topic"]})' if sp["topic"] else "") for sp in speakers]
+    speaker_bits = [f'Session {sp["session"]}: {sp["name"]}' + (f' ({sp["topic"]})' if sp["topic"] else "") for sp in speakers]
     st.caption("Speaker(s): " + " · ".join(speaker_bits))
 
 st.write("Thank you for attending. Please take a moment to complete this post-evaluation.")

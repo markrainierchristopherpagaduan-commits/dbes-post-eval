@@ -6,12 +6,6 @@ import db
 import auth
 import utils
 
-try:
-    from streamlit_sortables import sort_items
-    DRAG_DROP_AVAILABLE = True
-except ImportError:
-    DRAG_DROP_AVAILABLE = False
-
 auth.require_login()
 user = auth.current_user()
 
@@ -51,32 +45,49 @@ if details_submitted:
         st.success("Details saved. Add the speaker(s) below.")
 
 # ---------------------------------------------------------------------------
-# Step 2 — Speakers (one or more)
+# Step 2 — Speakers (one or more), each assigned to a session
 # ---------------------------------------------------------------------------
+
+MAX_SESSIONS = 10
 
 if "pending_activity" in st.session_state and not st.session_state.get("questions_ready"):
     st.divider()
     st.subheader("2. Speaker(s)")
-    st.caption("Add every speaker/facilitator/resource person for this activity. Each one gets their own set of rating questions that participants answer individually.")
+    st.caption(
+        "Add every speaker/facilitator/resource person for this activity and assign each one a session. "
+        "Each speaker's questions will appear under their session heading, answered individually by participants."
+    )
 
     if "draft_speakers" not in st.session_state:
         st.session_state["draft_speakers"] = []
 
+    used_sessions = {sp["session"] for sp in st.session_state["draft_speakers"]}
+    next_session = next((n for n in range(1, MAX_SESSIONS + 1) if n not in used_sessions), 1)
+
     for i, sp in enumerate(st.session_state["draft_speakers"]):
-        cols = st.columns([3, 3, 1])
-        cols[0].text_input("Speaker name", value=sp["name"], key=f"sp_name_{i}", disabled=True)
-        cols[1].text_input("Topic/session (optional)", value=sp.get("topic") or "", key=f"sp_topic_{i}", disabled=True)
-        if cols[2].button("Remove", key=f"sp_remove_{i}"):
+        cols = st.columns([1.4, 2.6, 2.6, 1])
+        cols[0].text_input("Session", value=f'Session {sp["session"]}', key=f"sp_session_{i}", disabled=True)
+        cols[1].text_input("Speaker name", value=sp["name"], key=f"sp_name_{i}", disabled=True)
+        cols[2].text_input("Topic (optional)", value=sp.get("topic") or "", key=f"sp_topic_{i}", disabled=True)
+        if cols[3].button("Remove", key=f"sp_remove_{i}"):
             st.session_state["draft_speakers"].pop(i)
             st.rerun()
 
     with st.form("add_speaker_form", clear_on_submit=True):
-        c1, c2, c3 = st.columns([3, 3, 1])
-        new_name = c1.text_input("Speaker name")
-        new_topic = c2.text_input("Topic/session (optional)")
-        add_speaker_clicked = c3.form_submit_button("Add speaker")
+        c1, c2, c3, c4 = st.columns([1.4, 2.6, 2.6, 1])
+        session_choice = c1.selectbox(
+            "Session", [f"Session {n}" for n in range(1, MAX_SESSIONS + 1)],
+            index=next_session - 1,
+        )
+        new_name = c2.text_input("Speaker name")
+        new_topic = c3.text_input("Topic (optional)")
+        add_speaker_clicked = c4.form_submit_button("Add speaker")
     if add_speaker_clicked and new_name.strip():
-        st.session_state["draft_speakers"].append({"name": new_name.strip(), "topic": new_topic.strip() or None})
+        session_num = int(session_choice.split(" ")[1])
+        st.session_state["draft_speakers"].append({
+            "name": new_name.strip(), "topic": new_topic.strip() or None, "session": session_num,
+        })
+        st.session_state["draft_speakers"].sort(key=lambda s: s["session"])
         st.rerun()
 
     st.caption(f"{len(st.session_state['draft_speakers'])} speaker(s) added.")
@@ -93,7 +104,7 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
                     "id": None,
                     "question_text": text_template.format(speaker=sp["name"]),
                     "qtype": qtype,
-                    "category": f'Speaker: {sp["name"]}',
+                    "category": f'Session {sp["session"]}',
                     "options": None,
                     "order_index": order,
                     "source": "speaker",
@@ -108,19 +119,21 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
         st.rerun()
 
     if not st.session_state["draft_speakers"]:
-        st.info("Add at least one speaker to continue. Most trainings will have 2 or more — add each one separately.")
+        st.info("Add at least one speaker to continue. Most trainings will have 2 or more — pick a session for each.")
 
 # ---------------------------------------------------------------------------
-# Step 3 — Evaluation questions
+# Step 3 — Evaluation questions (filled in / edited manually, no auto-reorder tool)
 # ---------------------------------------------------------------------------
 
 if st.session_state.get("questions_ready"):
     st.divider()
     st.subheader("3. Evaluation questions")
     st.caption(
-        "Base questions and each speaker's auto-generated questions are pre-filled below. "
-        "Drag a question up or down to reorder it, uncheck to exclude it, or edit its text/category/type inline. "
-        "The order shown here is the order participants will see on the evaluation form."
+        "Base questions (Content & Objectives, Facilitator, Logistics & Venue, Strengths, Areas to Improve, "
+        "Suggestions, Overall) and each speaker's session questions are pre-filled below in that order. "
+        "Uncheck to exclude a question, edit its text/category/type inline, and use 'Add a custom question' "
+        "below to fill in anything else — new questions are added to the end, so add them in the order you "
+        "want them to appear."
     )
 
     if st.button("← Back to speakers"):
@@ -128,45 +141,13 @@ if st.session_state.get("questions_ready"):
         st.session_state.pop("draft_questions", None)
         st.rerun()
 
-    # --- Drag-and-drop reordering ------------------------------------------
-    draft_list = st.session_state["draft_questions"]
-    if DRAG_DROP_AVAILABLE:
-        st.markdown("**Drag to reorder**")
-        drag_labels = [f'{i + 1}. {dq["question_text"][:70] or "(empty question)"}' for i, dq in enumerate(draft_list)]
-        new_order_labels = sort_items(drag_labels, direction="vertical", key="question_drag_sort")
-        if new_order_labels != drag_labels:
-            def _orig_index(label: str) -> int:
-                return int(label.split(".", 1)[0]) - 1
-            st.session_state["draft_questions"] = [draft_list[_orig_index(lbl)] for lbl in new_order_labels]
-            st.rerun()
-        st.caption("Tip: the numbers above are just position markers — they'll renumber automatically as you drag.")
-    else:
-        st.warning(
-            "Drag-and-drop reordering needs the `streamlit-sortables` package. "
-            "Run `pip install streamlit-sortables` (it's already in requirements.txt) and restart the app. "
-            "Using ↑/↓ buttons below in the meantime."
-        )
-
-    st.divider()
-    st.markdown("**Review & edit**")
-
-    swap_request = None
     updated = []
     current_category = None
-    n_questions = len(st.session_state["draft_questions"])
-    for i, dq in enumerate(st.session_state["draft_questions"]):
+    for dq in st.session_state["draft_questions"]:
         if dq["category"] != current_category:
             st.markdown(f"**{dq['category']}**")
             current_category = dq["category"]
-        if DRAG_DROP_AVAILABLE:
-            cols = st.columns([0.5, 3, 1.3, 1.3])
-        else:
-            cols = st.columns([0.3, 0.3, 0.5, 3, 1.3, 1.3])
-            if cols[0].button("↑", key=f"up_{dq['uid']}", disabled=(i == 0), help="Move up"):
-                swap_request = ("up", i)
-            if cols[1].button("↓", key=f"down_{dq['uid']}", disabled=(i == n_questions - 1), help="Move down"):
-                swap_request = ("down", i)
-            cols = cols[2:]
+        cols = st.columns([0.5, 3, 1.3, 1.3])
         include = cols[0].checkbox("Use", value=dq["include"], key=f"inc_{dq['uid']}")
         text = cols[1].text_input("Question", value=dq["question_text"], key=f"txt_{dq['uid']}", label_visibility="collapsed")
         category = cols[2].text_input("Category", value=dq["category"], key=f"cat_{dq['uid']}", label_visibility="collapsed")
@@ -175,15 +156,6 @@ if st.session_state.get("questions_ready"):
                                    key=f"typ_{dq['uid']}", label_visibility="collapsed")
         updated.append({**dq, "include": include, "question_text": text, "category": category, "qtype": qtype})
     st.session_state["draft_questions"] = updated
-
-    if swap_request:
-        action, idx = swap_request
-        lst = st.session_state["draft_questions"]
-        if action == "up" and idx > 0:
-            lst[idx - 1], lst[idx] = lst[idx], lst[idx - 1]
-        elif action == "down" and idx < len(lst) - 1:
-            lst[idx + 1], lst[idx] = lst[idx], lst[idx + 1]
-        st.rerun()
 
     st.markdown("**Add a custom question for this activity**")
     with st.form("add_question_form", clear_on_submit=True):

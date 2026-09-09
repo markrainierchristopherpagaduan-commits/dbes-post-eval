@@ -48,7 +48,7 @@ else:
 
     speakers = db.get_activity_speakers(selected["id"])
     if speakers:
-        st.caption("Speaker(s): " + " · ".join(sp["name"] for sp in speakers))
+        st.caption("Speaker(s): " + " · ".join(f'Session {sp["session"]}: {sp["name"]}' for sp in speakers))
 
     st.image(utils.generate_qr_png_bytes(utils.build_evaluation_url(selected["qr_token"])), width=220,
               caption="Evaluation QR code")

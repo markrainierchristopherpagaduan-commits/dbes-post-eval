@@ -107,6 +107,7 @@ SCHEMA_STATEMENTS = [
         activity_id TEXT NOT NULL REFERENCES activities(id),
         name TEXT NOT NULL,
         topic TEXT,
+        session_number INTEGER,
         order_index INTEGER NOT NULL
     )
     """,
@@ -205,6 +206,7 @@ def init_db():
     _try("ALTER TABLE activities RENAME COLUMN vicariate TO participants")
     _try("ALTER TABLE activities ADD COLUMN hosting_school TEXT")
     _try("ALTER TABLE activities ADD COLUMN participants TEXT")
+    _try("ALTER TABLE activity_speakers ADD COLUMN session_number INTEGER")
 
     existing = q("SELECT COUNT(*) AS c FROM base_questions")
     count = existing.rows[0][0] if existing.rows else 0
@@ -290,15 +292,15 @@ def create_activity(title, activity_type, activity_date, venue, hosting_school, 
 
 
 def add_activity_speakers(activity_id: str, speakers: list[dict]) -> list[dict]:
-    """speakers: list of dicts with name, topic. Returns list with generated ids, in order."""
+    """speakers: list of dicts with name, topic, session. Returns list with generated ids, in order."""
     stmts = []
     created = []
     for idx, sp in enumerate(speakers):
         sid = new_id()
-        created.append({"id": sid, "name": sp["name"], "topic": sp.get("topic")})
+        created.append({"id": sid, "name": sp["name"], "topic": sp.get("topic"), "session": sp.get("session")})
         stmts.append((
-            "INSERT INTO activity_speakers (id, activity_id, name, topic, order_index) VALUES (?, ?, ?, ?, ?)",
-            [sid, activity_id, sp["name"], sp.get("topic"), idx + 1],
+            "INSERT INTO activity_speakers (id, activity_id, name, topic, session_number, order_index) VALUES (?, ?, ?, ?, ?, ?)",
+            [sid, activity_id, sp["name"], sp.get("topic"), sp.get("session"), idx + 1],
         ))
     if stmts:
         qmany(stmts)
@@ -307,10 +309,10 @@ def add_activity_speakers(activity_id: str, speakers: list[dict]) -> list[dict]:
 
 def get_activity_speakers(activity_id: str) -> list[dict]:
     rs = q(
-        "SELECT id, name, topic, order_index FROM activity_speakers WHERE activity_id = ? ORDER BY order_index",
+        "SELECT id, name, topic, session_number, order_index FROM activity_speakers WHERE activity_id = ? ORDER BY order_index",
         [activity_id],
     )
-    return [{"id": r[0], "name": r[1], "topic": r[2], "order_index": r[3]} for r in rs.rows]
+    return [{"id": r[0], "name": r[1], "topic": r[2], "session": r[3], "order_index": r[4]} for r in rs.rows]
 
 
 def add_activity_questions(activity_id: str, questions: list[dict]):
@@ -388,7 +390,7 @@ def get_speaker_rating_averages(activity_id: str) -> list[dict]:
     """One row per speaker: overall average across all of that speaker's rating questions."""
     rs = q(
         """
-        SELECT sp.id, sp.name, sp.topic, AVG(ra.answer_rating) AS avg_rating, COUNT(ra.answer_rating) AS n
+        SELECT sp.id, sp.name, sp.topic, sp.session_number, AVG(ra.answer_rating) AS avg_rating, COUNT(ra.answer_rating) AS n
         FROM activity_speakers sp
         LEFT JOIN activity_questions aq ON aq.speaker_id = sp.id AND aq.qtype = 'rating'
         LEFT JOIN response_answers ra ON ra.question_id = aq.id AND ra.answer_rating IS NOT NULL
@@ -398,7 +400,7 @@ def get_speaker_rating_averages(activity_id: str) -> list[dict]:
         """,
         [activity_id],
     )
-    return [{"id": r[0], "name": r[1], "topic": r[2], "avg_rating": r[3], "n": r[4]} for r in rs.rows]
+    return [{"id": r[0], "name": r[1], "topic": r[2], "session": r[3], "avg_rating": r[4], "n": r[5]} for r in rs.rows]
 
 
 # ---------------------------------------------------------------------------
