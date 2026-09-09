@@ -374,6 +374,22 @@ def set_activity_status(activity_id: str, status: str):
     q("UPDATE activities SET status = ? WHERE id = ?", [status, activity_id])
 
 
+def delete_activity(activity_id: str):
+    """Permanently delete an activity and everything tied to it: its
+    speakers, questions, all submitted responses (and their individual
+    answers), and any saved qualitative summaries. Cannot be undone."""
+    q(
+        "DELETE FROM response_answers WHERE response_id IN "
+        "(SELECT id FROM responses WHERE activity_id = ?)",
+        [activity_id],
+    )
+    q("DELETE FROM responses WHERE activity_id = ?", [activity_id])
+    q("DELETE FROM activity_questions WHERE activity_id = ?", [activity_id])
+    q("DELETE FROM activity_speakers WHERE activity_id = ?", [activity_id])
+    q("DELETE FROM ai_summaries WHERE activity_id = ?", [activity_id])
+    q("DELETE FROM activities WHERE id = ?", [activity_id])
+
+
 def get_activity_questions(activity_id: str) -> list[dict]:
     rs = q(
         "SELECT id, question_text, qtype, category, options, order_index, speaker_id FROM activity_questions "

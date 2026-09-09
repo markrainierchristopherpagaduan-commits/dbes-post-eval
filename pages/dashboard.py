@@ -58,3 +58,25 @@ else:
     if st.button("Go to Activity Results →"):
         st.session_state["selected_activity_id"] = selected["id"]
         st.switch_page("pages/activity_results.py")
+
+    with st.expander("🗑️ Danger zone: delete this activity"):
+        st.caption(
+            "Permanently deletes this activity along with its speakers, questions, and "
+            f"**all {db.count_responses(selected['id'])} submitted response(s)**. This cannot be undone."
+        )
+        confirm_text = st.text_input(
+            f'Type the activity title exactly to confirm: "{selected["title"]}"',
+            key=f"delete_confirm_{selected['id']}",
+        )
+        if st.button(
+            "Delete activity permanently",
+            type="primary",
+            disabled=confirm_text.strip() != selected["title"],
+            key=f"delete_btn_{selected['id']}",
+        ):
+            db.delete_activity(selected["id"])
+            db.log_action(auth.current_user()["id"], auth.current_user()["username"],
+                           "activity_deleted", selected["title"])
+            st.session_state.pop("selected_activity_id", None)
+            st.success(f'"{selected["title"]}" has been deleted.')
+            st.rerun()
