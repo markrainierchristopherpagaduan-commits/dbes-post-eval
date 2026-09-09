@@ -77,7 +77,8 @@ with st.form("eval_form"):
 
     st.divider()
     st.subheader("Evaluation")
-    st.caption("Fields marked * are required. Please answer in a complete sentence — a single word, symbols, or blank spaces will not be accepted.")
+    st.caption("Fields marked * are required. Please select a rating for each rating question, and answer open-ended questions in a complete sentence — a single word, symbols, or blank spaces will not be accepted.")
+    st.info(f"**Rating scale:** {utils.rating_scale_help()}", icon="⭐")
 
     answers = {}
     current_category = None
@@ -87,7 +88,11 @@ with st.form("eval_form"):
             current_category = qn["category"]
 
         if qn["qtype"] == "rating":
-            answers[qn["id"]] = st.slider(qn["question_text"], 1, 5, 3, help=utils.rating_scale_help(), key=f"q_{qn['id']}")
+            st.markdown(f'{qn["question_text"]} *')
+            answers[qn["id"]] = st.segmented_control(
+                qn["question_text"], options=[1, 2, 3, 4, 5],
+                key=f"q_{qn['id']}", label_visibility="collapsed",
+            )
         elif qn["qtype"] == "multiple_choice":
             options = (qn["options"] or "").split("|") if qn["options"] else ["Yes", "No"]
             answers[qn["id"]] = st.radio(qn["question_text"], options, key=f"q_{qn['id']}")
@@ -100,16 +105,28 @@ with st.form("eval_form"):
     submitted = st.form_submit_button("Submit evaluation", type="primary")
 
 if submitted:
-    missing = [
+    missing_ratings = [
+        qn["question_text"] for qn in questions
+        if qn["qtype"] == "rating" and answers.get(qn["id"]) is None
+    ]
+    missing_open = [
         qn["question_text"] for qn in questions
         if qn["qtype"] == "open_ended" and _is_low_effort_answer(answers.get(qn["id"]))
     ]
-    if missing:
-        st.error(
-            "Please provide a complete, meaningful answer (not just a word, symbols, or spaces) "
-            "for the following required question(s):\n\n"
-            + "\n".join(f"- {m}" for m in missing)
-        )
+    if missing_ratings or missing_open:
+        error_parts = []
+        if missing_ratings:
+            error_parts.append(
+                "Please select a rating for the following question(s):\n\n"
+                + "\n".join(f"- {m}" for m in missing_ratings)
+            )
+        if missing_open:
+            error_parts.append(
+                "Please provide a complete, meaningful answer (not just a word, symbols, or spaces) "
+                "for the following required question(s):\n\n"
+                + "\n".join(f"- {m}" for m in missing_open)
+            )
+        st.error("\n\n".join(error_parts))
     else:
         formatted = [{"question_id": qid, "qtype": next(q["qtype"] for q in questions if q["id"] == qid), "value": val}
                      for qid, val in answers.items()]

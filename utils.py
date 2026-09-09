@@ -70,5 +70,8 @@ def generate_qr_png_bytes(data: str) -> bytes:
     return buf.getvalue()
 
 
+RATING_LABELS = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}
+
+
 def rating_scale_help() -> str:
-    return "1 = Poor, 2 = Fair, 3 = Good, 4 = Very Good, 5 = Excellent"
+    return " · ".join(f"{n} = {label}" for n, label in RATING_LABELS.items())
