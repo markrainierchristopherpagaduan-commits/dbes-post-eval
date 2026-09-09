@@ -32,6 +32,7 @@ with st.form("activity_details"):
     details_submitted = st.form_submit_button("Save details & continue to speakers")
 
 if details_submitted:
+    title = title.strip()
     if not title:
         st.error("Title is required.")
     else:

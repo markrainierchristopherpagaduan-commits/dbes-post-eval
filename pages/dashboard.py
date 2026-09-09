@@ -64,14 +64,17 @@ else:
             "Permanently deletes this activity along with its speakers, questions, and "
             f"**all {db.count_responses(selected['id'])} submitted response(s)**. This cannot be undone."
         )
+        st.caption("Copy the exact title below and paste it into the box to confirm:")
+        st.code(selected["title"], language=None)
         confirm_text = st.text_input(
-            f'Type the activity title exactly to confirm: "{selected["title"]}"',
+            "Type/paste the activity title to confirm",
             key=f"delete_confirm_{selected['id']}",
         )
+        title_matches = confirm_text.strip() == selected["title"].strip()
         if st.button(
             "Delete activity permanently",
             type="primary",
-            disabled=confirm_text.strip() != selected["title"],
+            disabled=not title_matches,
             key=f"delete_btn_{selected['id']}",
         ):
             db.delete_activity(selected["id"])
