@@ -78,7 +78,7 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
     if st.button("Continue to evaluation questions →", type="primary",
                  disabled=len(st.session_state["draft_speakers"]) == 0):
         base_questions = db.list_base_questions()
-        draft = [{**bq, "source": "base", "include": True, "speaker_index": None} for bq in base_questions]
+        draft = [{**bq, "source": "base", "include": True, "speaker_index": None, "uid": db.new_id()} for bq in base_questions]
 
         order = len(draft) + 1
         for s_idx, sp in enumerate(st.session_state["draft_speakers"]):
@@ -93,6 +93,7 @@ if "pending_activity" in st.session_state and not st.session_state.get("question
                     "source": "speaker",
                     "include": True,
                     "speaker_index": s_idx,
+                    "uid": db.new_id(),
                 })
                 order += 1
 
@@ -112,7 +113,8 @@ if st.session_state.get("questions_ready"):
     st.subheader("3. Evaluation questions")
     st.caption(
         "Base questions and each speaker's auto-generated questions are pre-filled below. "
-        "Uncheck to exclude, edit text/category inline, or add new questions for this activity."
+        "Uncheck to exclude, edit text/category inline, use ↑/↓ to reorder, or add new questions for this activity. "
+        "The order shown here is the order participants will see on the evaluation form."
     )
 
     if st.button("← Back to speakers"):
@@ -120,21 +122,36 @@ if st.session_state.get("questions_ready"):
         st.session_state.pop("draft_questions", None)
         st.rerun()
 
+    swap_request = None
     updated = []
     current_category = None
+    n_questions = len(st.session_state["draft_questions"])
     for i, dq in enumerate(st.session_state["draft_questions"]):
         if dq["category"] != current_category:
             st.markdown(f"**{dq['category']}**")
             current_category = dq["category"]
-        cols = st.columns([0.5, 3, 1.3, 1.3])
-        include = cols[0].checkbox("Use", value=dq["include"], key=f"inc_{i}")
-        text = cols[1].text_input("Question", value=dq["question_text"], key=f"txt_{i}", label_visibility="collapsed")
-        category = cols[2].text_input("Category", value=dq["category"], key=f"cat_{i}", label_visibility="collapsed")
-        qtype = cols[3].selectbox("Type", ["rating", "multiple_choice", "open_ended"],
+        cols = st.columns([0.3, 0.3, 0.5, 3, 1.3, 1.3])
+        if cols[0].button("↑", key=f"up_{dq['uid']}", disabled=(i == 0), help="Move up"):
+            swap_request = ("up", i)
+        if cols[1].button("↓", key=f"down_{dq['uid']}", disabled=(i == n_questions - 1), help="Move down"):
+            swap_request = ("down", i)
+        include = cols[2].checkbox("Use", value=dq["include"], key=f"inc_{dq['uid']}")
+        text = cols[3].text_input("Question", value=dq["question_text"], key=f"txt_{dq['uid']}", label_visibility="collapsed")
+        category = cols[4].text_input("Category", value=dq["category"], key=f"cat_{dq['uid']}", label_visibility="collapsed")
+        qtype = cols[5].selectbox("Type", ["rating", "multiple_choice", "open_ended"],
                                    index=["rating", "multiple_choice", "open_ended"].index(dq["qtype"]),
-                                   key=f"typ_{i}", label_visibility="collapsed")
+                                   key=f"typ_{dq['uid']}", label_visibility="collapsed")
         updated.append({**dq, "include": include, "question_text": text, "category": category, "qtype": qtype})
     st.session_state["draft_questions"] = updated
+
+    if swap_request:
+        action, idx = swap_request
+        lst = st.session_state["draft_questions"]
+        if action == "up" and idx > 0:
+            lst[idx - 1], lst[idx] = lst[idx], lst[idx - 1]
+        elif action == "down" and idx < len(lst) - 1:
+            lst[idx + 1], lst[idx] = lst[idx], lst[idx + 1]
+        st.rerun()
 
     st.markdown("**Add a custom question for this activity**")
     with st.form("add_question_form", clear_on_submit=True):
@@ -148,7 +165,7 @@ if st.session_state.get("questions_ready"):
             "id": None, "question_text": new_text.strip(), "qtype": new_type,
             "category": new_category.strip() or "Custom", "options": None,
             "order_index": len(st.session_state["draft_questions"]) + 1,
-            "source": "custom", "include": True, "speaker_index": None,
+            "source": "custom", "include": True, "speaker_index": None, "uid": db.new_id(),
         })
         st.rerun()
 
