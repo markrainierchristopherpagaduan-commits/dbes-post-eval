@@ -6,6 +6,12 @@ import db
 import auth
 import utils
 
+try:
+    from streamlit_sortables import sort_items
+    DRAG_DROP_AVAILABLE = True
+except ImportError:
+    DRAG_DROP_AVAILABLE = False
+
 auth.require_login()
 user = auth.current_user()
 
@@ -113,7 +119,7 @@ if st.session_state.get("questions_ready"):
     st.subheader("3. Evaluation questions")
     st.caption(
         "Base questions and each speaker's auto-generated questions are pre-filled below. "
-        "Uncheck to exclude, edit text/category inline, use ↑/↓ to reorder, or add new questions for this activity. "
+        "Drag a question up or down to reorder it, uncheck to exclude it, or edit its text/category/type inline. "
         "The order shown here is the order participants will see on the evaluation form."
     )
 
@@ -121,6 +127,28 @@ if st.session_state.get("questions_ready"):
         st.session_state.pop("questions_ready", None)
         st.session_state.pop("draft_questions", None)
         st.rerun()
+
+    # --- Drag-and-drop reordering ------------------------------------------
+    draft_list = st.session_state["draft_questions"]
+    if DRAG_DROP_AVAILABLE:
+        st.markdown("**Drag to reorder**")
+        drag_labels = [f'{i + 1}. {dq["question_text"][:70] or "(empty question)"}' for i, dq in enumerate(draft_list)]
+        new_order_labels = sort_items(drag_labels, direction="vertical", key="question_drag_sort")
+        if new_order_labels != drag_labels:
+            def _orig_index(label: str) -> int:
+                return int(label.split(".", 1)[0]) - 1
+            st.session_state["draft_questions"] = [draft_list[_orig_index(lbl)] for lbl in new_order_labels]
+            st.rerun()
+        st.caption("Tip: the numbers above are just position markers — they'll renumber automatically as you drag.")
+    else:
+        st.warning(
+            "Drag-and-drop reordering needs the `streamlit-sortables` package. "
+            "Run `pip install streamlit-sortables` (it's already in requirements.txt) and restart the app. "
+            "Using ↑/↓ buttons below in the meantime."
+        )
+
+    st.divider()
+    st.markdown("**Review & edit**")
 
     swap_request = None
     updated = []
@@ -130,15 +158,19 @@ if st.session_state.get("questions_ready"):
         if dq["category"] != current_category:
             st.markdown(f"**{dq['category']}**")
             current_category = dq["category"]
-        cols = st.columns([0.3, 0.3, 0.5, 3, 1.3, 1.3])
-        if cols[0].button("↑", key=f"up_{dq['uid']}", disabled=(i == 0), help="Move up"):
-            swap_request = ("up", i)
-        if cols[1].button("↓", key=f"down_{dq['uid']}", disabled=(i == n_questions - 1), help="Move down"):
-            swap_request = ("down", i)
-        include = cols[2].checkbox("Use", value=dq["include"], key=f"inc_{dq['uid']}")
-        text = cols[3].text_input("Question", value=dq["question_text"], key=f"txt_{dq['uid']}", label_visibility="collapsed")
-        category = cols[4].text_input("Category", value=dq["category"], key=f"cat_{dq['uid']}", label_visibility="collapsed")
-        qtype = cols[5].selectbox("Type", ["rating", "multiple_choice", "open_ended"],
+        if DRAG_DROP_AVAILABLE:
+            cols = st.columns([0.5, 3, 1.3, 1.3])
+        else:
+            cols = st.columns([0.3, 0.3, 0.5, 3, 1.3, 1.3])
+            if cols[0].button("↑", key=f"up_{dq['uid']}", disabled=(i == 0), help="Move up"):
+                swap_request = ("up", i)
+            if cols[1].button("↓", key=f"down_{dq['uid']}", disabled=(i == n_questions - 1), help="Move down"):
+                swap_request = ("down", i)
+            cols = cols[2:]
+        include = cols[0].checkbox("Use", value=dq["include"], key=f"inc_{dq['uid']}")
+        text = cols[1].text_input("Question", value=dq["question_text"], key=f"txt_{dq['uid']}", label_visibility="collapsed")
+        category = cols[2].text_input("Category", value=dq["category"], key=f"cat_{dq['uid']}", label_visibility="collapsed")
+        qtype = cols[3].selectbox("Type", ["rating", "multiple_choice", "open_ended"],
                                    index=["rating", "multiple_choice", "open_ended"].index(dq["qtype"]),
                                    key=f"typ_{dq['uid']}", label_visibility="collapsed")
         updated.append({**dq, "include": include, "question_text": text, "category": category, "qtype": qtype})
