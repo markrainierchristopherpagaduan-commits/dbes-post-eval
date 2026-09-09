@@ -12,6 +12,8 @@ user = auth.current_user()
 st.title("➕ Create Activity")
 st.caption("Set up a program, activity, seminar, or training and generate its evaluation QR code.")
 
+utils.warn_if_base_url_unreachable()
+
 # ---------------------------------------------------------------------------
 # Step 1 — Activity details
 # ---------------------------------------------------------------------------
@@ -256,4 +258,3 @@ if st.session_state.get("questions_ready"):
 
         for key in ("pending_activity", "draft_speakers", "draft_questions", "questions_ready"):
             st.session_state.pop(key, None)
-            

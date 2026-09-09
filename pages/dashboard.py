@@ -9,6 +9,8 @@ auth.require_login()
 
 st.title("📊 Dashboard")
 
+utils.warn_if_base_url_unreachable()
+
 activities = db.list_activities()
 
 if not activities:

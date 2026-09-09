@@ -45,6 +45,7 @@ with st.form("eval_form"):
 
     st.divider()
     st.subheader("Evaluation")
+    st.caption("Fields marked * are required.")
 
     answers = {}
     current_category = None
@@ -59,13 +60,23 @@ with st.form("eval_form"):
             options = (qn["options"] or "").split("|") if qn["options"] else ["Yes", "No"]
             answers[qn["id"]] = st.radio(qn["question_text"], options, key=f"q_{qn['id']}")
         else:
-            answers[qn["id"]] = st.text_area(qn["question_text"], key=f"q_{qn['id']}")
+            answers[qn["id"]] = st.text_area(f'{qn["question_text"]} *', key=f"q_{qn['id']}")
 
     submitted = st.form_submit_button("Submit evaluation", type="primary")
 
 if submitted:
-    formatted = [{"question_id": qid, "qtype": next(q["qtype"] for q in questions if q["id"] == qid), "value": val}
-                 for qid, val in answers.items()]
-    db.submit_response(activity["id"], name.strip() or None, school.strip() or None, formatted)
-    st.session_state[f"submitted_{activity['id']}"] = True
-    st.rerun()
+    missing = [
+        qn["question_text"] for qn in questions
+        if qn["qtype"] == "open_ended" and not (answers.get(qn["id"]) or "").strip()
+    ]
+    if missing:
+        st.error(
+            "Please answer all required open-ended questions before submitting:\n\n"
+            + "\n".join(f"- {m}" for m in missing)
+        )
+    else:
+        formatted = [{"question_id": qid, "qtype": next(q["qtype"] for q in questions if q["id"] == qid), "value": val}
+                     for qid, val in answers.items()]
+        db.submit_response(activity["id"], name.strip() or None, school.strip() or None, formatted)
+        st.session_state[f"submitted_{activity['id']}"] = True
+        st.rerun()

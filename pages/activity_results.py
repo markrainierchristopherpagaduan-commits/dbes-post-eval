@@ -6,6 +6,7 @@ import auth
 import report
 
 auth.require_login()
+user = auth.current_user()
 
 st.title("📈 Activity Results")
 
@@ -26,6 +27,35 @@ st.metric("Total responses", n_responses)
 if n_responses == 0:
     st.info("No responses yet for this activity.")
     st.stop()
+
+with st.expander("🗑️ Manage individual responses (delete a specific submission)"):
+    st.caption("Use this to remove a test submission or a mistaken entry. Deleting a response cannot be undone.")
+    responses = db.list_responses(activity["id"])
+    pending_key = f"pending_delete_response_{activity['id']}"
+    pending_id = st.session_state.get(pending_key)
+
+    for r in responses:
+        cols = st.columns([2, 2, 2, 1.3, 1.3])
+        cols[0].write(r["participant_name"] or "—")
+        cols[1].write(r["participant_school"] or "—")
+        cols[2].write(r["submitted_at"])
+        if pending_id == r["id"]:
+            if cols[3].button("✅ Confirm", key=f"confirm_del_{r['id']}", type="primary"):
+                db.delete_response(r["id"])
+                db.log_action(
+                    user["id"], user["username"], "response_deleted",
+                    f'{activity["title"]} — {r["participant_name"] or "anonymous"} ({r["submitted_at"]})',
+                )
+                st.session_state.pop(pending_key, None)
+                st.success("Response deleted.")
+                st.rerun()
+            if cols[4].button("✖ Cancel", key=f"cancel_del_{r['id']}"):
+                st.session_state.pop(pending_key, None)
+                st.rerun()
+        else:
+            if cols[3].button("Delete", key=f"del_{r['id']}"):
+                st.session_state[pending_key] = r["id"]
+                st.rerun()
 
 st.subheader("Ratings summary")
 rating_summary = db.get_rating_summary(activity["id"])

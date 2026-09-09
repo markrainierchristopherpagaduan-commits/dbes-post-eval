@@ -433,6 +433,24 @@ def count_responses(activity_id: str) -> int:
     return rs.rows[0][0] if rs.rows else 0
 
 
+def list_responses(activity_id: str) -> list[dict]:
+    rs = q(
+        "SELECT id, participant_name, participant_school, submitted_at FROM responses "
+        "WHERE activity_id = ? ORDER BY submitted_at DESC",
+        [activity_id],
+    )
+    return [
+        {"id": r[0], "participant_name": r[1], "participant_school": r[2], "submitted_at": r[3]}
+        for r in rs.rows
+    ]
+
+
+def delete_response(response_id: str):
+    """Delete a single response and all of its answers. Cannot be undone."""
+    q("DELETE FROM response_answers WHERE response_id = ?", [response_id])
+    q("DELETE FROM responses WHERE id = ?", [response_id])
+
+
 def get_rating_summary(activity_id: str) -> list[dict]:
     """Average rating per rating-type question for this activity, including which speaker (if any) it's about."""
     rs = q(
