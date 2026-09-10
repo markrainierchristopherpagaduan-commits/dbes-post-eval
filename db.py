@@ -9,6 +9,7 @@ Dashboard on Windows.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 import datetime as dt
 from typing import Any, Optional
@@ -195,6 +196,33 @@ DEFAULT_SPEAKER_QUESTIONS = [
     ("{speaker} answered questions/clarifications well.", "rating", 3),
 ]
 
+# The fixed final-area order for everything that isn't a pre-session
+# category or a per-speaker Session N: Overall rating first, then the
+# three open-ended questions.
+_END_OF_FORM_CATEGORIES = ["Overall", "Strengths", "Areas to Improve", "Suggestions"]
+
+_SESSION_RE = re.compile(r"^Session (\d+)$")
+
+
+def _display_rank(category: str, fallback_order: int = 0) -> tuple:
+    """Deterministic sort key applied every time questions are read, so
+    the on-screen order (evaluation form, question editor, report) is
+    always: pre-session categories -> Session 1, Session 2, ... -> Overall
+    -> Strengths -> Areas to Improve -> Suggestions -> anything else —
+    regardless of what order_index happens to be stored in the database.
+    This does not depend on any prior migration having run correctly; it
+    recomputes the order at read time, so it can't drift out of sync
+    again."""
+    pre_order = ["Content & Objectives", "Facilitator", "Logistics & Venue"]
+    if category in pre_order:
+        return (0, pre_order.index(category), fallback_order)
+    m = _SESSION_RE.match(category or "")
+    if m:
+        return (1, int(m.group(1)), fallback_order)
+    if category in _END_OF_FORM_CATEGORIES:
+        return (2, _END_OF_FORM_CATEGORIES.index(category), fallback_order)
+    return (3, 0, fallback_order)
+
 
 def _try(sql: str):
     """Run a migration statement, ignoring errors (e.g. column already renamed/exists)."""
@@ -324,10 +352,12 @@ def list_base_questions(active_only: bool = True) -> list[dict]:
         sql += " WHERE is_active = 1"
     sql += " ORDER BY order_index"
     rs = q(sql)
-    return [
+    rows = [
         {"id": r[0], "question_text": r[1], "qtype": r[2], "category": r[3], "options": r[4], "order_index": r[5], "is_active": r[6]}
         for r in rs.rows
     ]
+    rows.sort(key=lambda r: _display_rank(r["category"], r["order_index"]))
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -492,10 +522,16 @@ def get_activity_questions(activity_id: str) -> list[dict]:
         "WHERE activity_id = ? ORDER BY order_index",
         [activity_id],
     )
-    return [
+    rows = [
         {"id": r[0], "question_text": r[1], "qtype": r[2], "category": r[3], "options": r[4], "order_index": r[5], "speaker_id": r[6]}
         for r in rs.rows
     ]
+    # Always re-derive display order from category (see _display_rank) —
+    # this is what fixes the evaluation form / results / report for
+    # activities that were already created, without needing any one-off
+    # data migration to have succeeded first.
+    rows.sort(key=lambda r: _display_rank(r["category"], r["order_index"]))
+    return rows
 
 
 def get_speaker_rating_averages(activity_id: str) -> list[dict]:
@@ -578,10 +614,12 @@ def get_rating_summary(activity_id: str) -> list[dict]:
         """,
         [activity_id],
     )
-    return [
+    rows = [
         {"question_id": r[0], "question_text": r[1], "category": r[2], "avg_rating": r[3], "n": r[4], "speaker_name": r[5]}
         for r in rs.rows
     ]
+    rows.sort(key=lambda r: _display_rank(r["category"]))
+    return rows
 
 
 def get_open_ended_answers(activity_id: str, category: Optional[str] = None) -> list[dict]:
